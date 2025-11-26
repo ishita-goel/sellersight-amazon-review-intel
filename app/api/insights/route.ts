@@ -1,21 +1,7 @@
-import { NextRequest, NextResponse } from "next/server";
-
-export async function POST(req: NextRequest) {
-  // temporary dummy handler so Vercel build passes
-  return NextResponse.json({
-    message: "Insights endpoint is working",
-  });
-}
-/**import { NextResponse } from "next/server";
-import fs from "fs";
+import { NextResponse } from "next/server";
 import path from "path";
+import { promises as fs } from "fs";
 
-/**
- * GET /api/insights
- * Returns precomputed feature sentiment + prioritized fixes data
- * for charts/dashboard and recommendations.
- */
-/**
 export async function GET() {
   try {
     const dataDir = path.join(process.cwd(), "data");
@@ -29,17 +15,12 @@ export async function GET() {
       "prioritized_fixes.json"
     );
 
-    // Read feature_sentiment.csv
-    const featureSentimentCsv = fs.readFileSync(
-      featureSentimentPath,
-      "utf-8"
-    );
+    // Read files asynchronously
+    const [featureSentimentCsv, prioritizedFixesRaw] = await Promise.all([
+      fs.readFile(featureSentimentPath, "utf-8"),
+      fs.readFile(prioritizedFixesPath, "utf-8"),
+    ]);
 
-    // Read prioritized_fixes.json
-    const prioritizedFixesRaw = fs.readFileSync(
-      prioritizedFixesPath,
-      "utf-8"
-    );
     const prioritizedFixes = JSON.parse(prioritizedFixesRaw);
 
     return NextResponse.json(
@@ -60,5 +41,6 @@ export async function GET() {
     );
   }
 }
-*/
 
+// Optional: ensure this always runs on the server
+export const dynamic = "force-dynamic";
