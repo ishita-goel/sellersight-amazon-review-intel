@@ -12,7 +12,7 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-// 🔥 Updated metadata with dynamic title + icons
+// 🔥 This controls your tab title + SEO + favicon
 export const metadata: Metadata = {
   title: {
     default: "SellerSight — Amazon Review Intelligence",
