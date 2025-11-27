@@ -27,12 +27,24 @@ const formSchema = z.object({
     .max(2000, "Message must be at most 2000 characters."),
 });
 
+// 🔹 Helper to build the welcome message
+const makeWelcomeMessage = (): UIMessage => ({
+  id: `welcome-${Date.now()}`,
+  role: "assistant",
+  parts: [
+    {
+      type: "text",
+      text: WELCOME_MESSAGE,
+    },
+  ],
+});
+
 export default function Chat() {
   const [isClient, setIsClient] = useState(false);
   const [durations, setDurations] = useState<Record<string, number>>({});
   const welcomeMessageShownRef = useRef<boolean>(false);
 
-  // ❗ No messages from localStorage – useChat starts empty each load
+  // No persistence – useChat starts empty each load
   const { messages, sendMessage, status, stop, setMessages } = useChat();
 
   useEffect(() => {
@@ -42,17 +54,7 @@ export default function Chat() {
   // Show welcome message once per page load
   useEffect(() => {
     if (isClient && !welcomeMessageShownRef.current) {
-      const welcomeMessage: UIMessage = {
-        id: `welcome-${Date.now()}`,
-        role: "assistant",
-        parts: [
-          {
-            type: "text",
-            text: WELCOME_MESSAGE,
-          },
-        ],
-      };
-      setMessages([welcomeMessage]);
+      setMessages([makeWelcomeMessage()]);
       welcomeMessageShownRef.current = true;
     }
   }, [isClient, setMessages]);
@@ -77,7 +79,7 @@ export default function Chat() {
   }
 
   function clearChat() {
-    const newMessages: UIMessage[] = [];
+    const newMessages: UIMessage[] = [makeWelcomeMessage()];
     const newDurations: Record<string, number> = {};
     setMessages(newMessages);
     setDurations(newDurations);
