@@ -1,37 +1,46 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import Link from "next/link";
-import { z } from "zod";
-import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useChat } from "@ai-sdk/react";
-import { UIMessage } from "ai";
+import { Controller, useForm } from "react-hook-form";
+import { toast } from "sonner";
+import * as z from "zod";
 
 import { Button } from "@/components/ui/button";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { useChat } from "@ai-sdk/react";
+import { ArrowUp, Loader2, Plus, Square } from "lucide-react";
 import { MessageWall } from "@/components/messages/message-wall";
-
-import { ArrowUp, Loader2, Plus, Square, MessageCircle } from "lucide-react";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { UIMessage } from "ai";
+import { useEffect, useState, useRef } from "react";
 import { AI_NAME, OWNER_NAME, WELCOME_MESSAGE } from "@/config";
+import Link from "next/link";
 
+// ===== Schema =====
 const formSchema = z.object({
-  message: z.string().min(1, "Please enter a message."),
+  message: z
+    .string()
+    .min(1, "Message cannot be empty.")
+    .max(2000, "Message must be at most 2000 characters."),
 });
 
+// 🔹 Helper to build the welcome message
 const makeWelcomeMessage = (): UIMessage => ({
   id: `welcome-${Date.now()}`,
   role: "assistant",
-  parts: [{ type: "text", text: WELCOME_MESSAGE }],
+  parts: [
+    {
+      type: "text",
+      text: WELCOME_MESSAGE,
+    },
+  ],
 });
 
 export default function Chat() {
   const [isClient, setIsClient] = useState(false);
   const [durations, setDurations] = useState<Record<string, number>>({});
-
-  const welcomeMessageShownRef = useRef(false);
+  const welcomeMessageShownRef = useRef<boolean>(false);
 
   const { messages, sendMessage, status, stop, setMessages } = useChat();
 
@@ -39,177 +48,78 @@ export default function Chat() {
     setIsClient(true);
   }, []);
 
-  // Show welcome message once on first load
+  // Show welcome message once per load
   useEffect(() => {
-    if (!isClient) return;
-    if (!welcomeMessageShownRef.current && messages.length === 0) {
+    if (isClient && !welcomeMessageShownRef.current) {
       setMessages([makeWelcomeMessage()]);
       welcomeMessageShownRef.current = true;
     }
-  }, [isClient, messages.length, setMessages]);
+  }, [isClient, setMessages]);
 
   const handleDurationChange = (key: string, duration: number) => {
-    setDurations((prev) => ({ ...prev, [key]: duration }));
+    setDurations((prev) => ({
+      ...prev,
+      [key]: duration,
+    }));
   };
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
-    defaultValues: {
-      message: "",
-    },
+    defaultValues: { message: "" },
   });
 
-  const clearChat = () => {
+  function onSubmit(data: z.infer<typeof formSchema>) {
+    sendMessage({ text: data.message });
+    form.reset();
+  }
+
+  function clearChat() {
     setMessages([makeWelcomeMessage()]);
     setDurations({});
-    welcomeMessageShownRef.current = true;
-    form.reset({ message: "" });
-  };
-
-  const onSubmit = async (data: z.infer<typeof formSchema>) => {
-    const text = data.message.trim();
-    if (!text) return;
-    await sendMessage(text);
-    form.reset({ message: "" });
-  };
+    toast.success("New analysis started");
+  }
 
   return (
-    <div className="flex h-screen bg-[#FAF7F2] text-[#0F1111] font-sans">
-      {/* ============= LEFT SIDEBAR (GPT-style) ============= */}
-      <aside className="hidden md:flex w-64 flex-col bg-[#111827] text-white">
-        {/* Brand header */}
-        <div className="px-4 py-4 border-b border-white/10 flex items-center gap-3">
-          <Avatar className="h-9 w-9 bg-white/10">
-            <AvatarImage src="/sellersight-logo.png" />
-            <AvatarFallback>SS</AvatarFallback>
-          </Avatar>
-          <div className="flex flex-col">
-            <span className="text-sm font-semibold tracking-tight">
-              SellerSight
-            </span>
-            <span className="text-[11px] text-white/70">
-              Amazon Review Intelligence
-            </span>
-          </div>
-        </div>
-
-        {/* New analysis button */}
-        <div className="px-4 pt-4">
-          <Button
-            type="button"
-            onClick={clearChat}
-            className="w-full justify-start gap-2 rounded-full bg-white text-[#111827] hover:bg-gray-100 text-xs font-medium"
-          >
-            <Plus className="h-3 w-3" />
-            New analysis
-          </Button>
-        </div>
-
-        {/* “History” section – one current session for now */}
-        <div className="px-4 pt-6 flex-1 overflow-y-auto">
-          <p className="text-[11px] uppercase tracking-wide text-white/60 mb-2">
-            Recent sessions
-          </p>
-          <button className="w-full flex items-center gap-2 rounded-lg px-3 py-2 text-xs bg-white/10 hover:bg-white/15 text-white">
-            <MessageCircle className="h-3 w-3 opacity-80" />
-            <span className="truncate">Current analysis</span>
-          </button>
-          <p className="mt-4 text-[11px] text-white/50">
-            (Multi-session history can be added later — this is the active
-            workspace.)
-          </p>
-        </div>
-
-        {/* Sidebar footer */}
-        <div className="px-4 py-3 text-[11px] text-white/50 border-t border-white/10">
-          © {new Date().getFullYear()} {OWNER_NAME}
-        </div>
-      </aside>
-
-      {/* ============= MAIN CHAT PANEL ============= */}
-      <div className="flex-1 flex flex-col bg-white">
-        {/* Top gradient header */}
-        <header className="bg-gradient-to-r from-[#4C6FFF] to-[#8A2EFF] text-white">
-          <div className="mx-auto flex w-full max-w-6xl items-center justify-between px-6 py-4">
-            <div className="flex items-center gap-3">
-              {/* Mobile logo when sidebar hidden */}
-              <div className="md:hidden">
+    // 👉 full-screen, aligned to top, nice beige bg
+    <div className="flex h-screen justify-center bg-[#FAF7F2] text-[#0F1111] font-sans">
+      {/* AWS-style panel, but wider for desktop */}
+      <main className="w-full flex justify-center items-start pt-8 px-4">
+        <div className="w-full max-w-4xl rounded-3xl shadow-xl overflow-hidden bg-white border border-gray-200">
+          {/* Gradient header like AWS widget */}
+          <div className="bg-gradient-to-r from-[#4C6FFF] to-[#8A2EFF] px-6 py-4 text-white">
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex items-center gap-2">
                 <Avatar className="h-8 w-8 border border-white/40">
                   <AvatarImage src="/sellersight-logo.png" />
                   <AvatarFallback>SS</AvatarFallback>
                 </Avatar>
+                <div className="flex flex-col">
+                  <span className="text-sm font-semibold">
+                    Ask {AI_NAME}
+                  </span>
+                  <span className="text-[11px] opacity-90">
+                    Get data-backed insights from Amazon reviews.
+                  </span>
+                </div>
               </div>
-              <div className="flex flex-col">
-                <span className="text-sm font-semibold">
-                  {AI_NAME} · Review Intelligence Agent
-                </span>
-                <span className="text-[11px] opacity-90">
-                  Analyze ASINs, competitors, and review patterns with one AI
-                  workspace.
-                </span>
-              </div>
+
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 rounded-full bg-white/10 hover:bg-white/20 border border-white/30 text-xs text-white"
+                type="button"
+                onClick={clearChat}
+                title="Start new analysis"
+              >
+                <Plus className="h-3 w-3" />
+              </Button>
             </div>
-          </div>
-        </header>
 
-        {/* Quick-start suggestions */}
-        <section className="border-b border-gray-200 bg-[#F9FAFB]">
-          <div className="mx-auto w-full max-w-6xl px-6 pt-4 pb-3 text-xs text-[#374151]">
-            <p className="mb-2 text-[11px] font-medium uppercase tracking-wide text-[#6B7280]">
-              Want help getting started?
-            </p>
-            <div className="flex flex-wrap gap-2">
-              <QuickStartButton
-                label="Analyze my product's reviews"
-                prompt="Help me analyze reviews for my Amazon product and show top complaints and strengths."
-                onClick={(text) => form.setValue("message", text)}
-              />
-              <QuickStartButton
-                label="Compare with a competitor ASIN"
-                prompt="Compare my ASIN to a close competitor based on Amazon reviews and highlight gaps."
-                onClick={(text) => form.setValue("message", text)}
-              />
-              <QuickStartButton
-                label="Find key issues hurting my rating"
-                prompt="From recent reviews, identify the top issues hurting my star rating and how to fix them."
-                onClick={(text) => form.setValue("message", text)}
-              />
-            </div>
-          </div>
-        </section>
-
-        {/* Messages area */}
-        <main className="flex-1 overflow-y-auto">
-          <div className="mx-auto w-full max-w-6xl px-6 py-4">
-            {isClient ? (
-              <>
-                <MessageWall
-                  messages={messages}
-                  status={status}
-                  durations={durations}
-                  onDurationChange={handleDurationChange}
-                />
-                {status === "submitted" && (
-                  <div className="mt-2 flex w-full max-w-3xl justify-start">
-                    <Loader2 className="h-4 w-4 animate-spin text-gray-400" />
-                  </div>
-                )}
-              </>
-            ) : (
-              <div className="flex w-full justify-center py-6">
-                <Loader2 className="h-4 w-4 animate-spin text-gray-400" />
-              </div>
-            )}
-          </div>
-        </main>
-
-        {/* INPUT BAR at the very bottom */}
-        <section className="border-t border-gray-200 bg-white">
-          <div className="mx-auto w-full max-w-6xl px-6 py-3">
+            {/* Input bar INSIDE header, like AWS screenshot */}
             <form
-              id="chat-form"
-              className="w-full"
               onSubmit={form.handleSubmit(onSubmit)}
+              className="mt-4"
+              id="chat-form"
             >
               <FieldGroup>
                 <Controller
@@ -218,42 +128,38 @@ export default function Chat() {
                   render={({ field, fieldState }) => (
                     <Field data-invalid={fieldState.invalid}>
                       <FieldLabel className="sr-only">Message</FieldLabel>
-                      <div className="relative flex items-center">
+                      <div className="relative">
                         <Input
                           {...field}
-                          placeholder="Ask SellerSight anything about your ASINs, reviews, or competitors…"
-                          className="h-12 w-full rounded-full border border-gray-300 bg-white pl-4 pr-12 text-sm text-[#0F1111] shadow-sm focus:outline-none focus:ring-2 focus:ring-[#4C6FFF]"
+                          placeholder="Ask a question about your ASIN or category…"
+                          className="h-10 w-full rounded-full border border-white/60 bg-white text-xs text-[#0F1111] pl-4 pr-10 shadow-sm focus:outline-none focus:ring-2 focus:ring-white"
                           disabled={status === "streaming"}
                           autoComplete="off"
                           onKeyDown={(e) => {
-                            if (
-                              e.key === "Enter" &&
-                              !e.shiftKey &&
-                              !e.nativeEvent.isComposing
-                            ) 
-                            {
+                            if (e.key === "Enter" && !e.shiftKey) {
                               e.preventDefault();
                               form.handleSubmit(onSubmit)();
                             }
                           }}
                         />
-                        {status === "streaming" ? (
+                        {(status === "ready" || status === "error") && (
+                          <Button
+                            type="submit"
+                            disabled={!field.value.trim()}
+                            size="icon"
+                            className="absolute right-1 top-1 h-8 w-8 rounded-full bg-[#232F3E] hover:bg-[#111827] text-white shadow"
+                          >
+                            <ArrowUp className="h-4 w-4" />
+                          </Button>
+                        )}
+                        {(status === "streaming" || status === "submitted") && (
                           <Button
                             type="button"
                             size="icon"
-                            className="absolute right-1 h-9 w-9 rounded-full bg-gray-200 text-[#0F1111]"
                             onClick={() => stop()}
+                            className="absolute right-1 top-1 h-8 w-8 rounded-full bg-white/80 text-[#0F1111]"
                           >
                             <Square className="h-4 w-4" />
-                          </Button>
-                        ) : (
-                          <Button
-                            type="submit"
-                            size="icon"
-                            disabled={!field.value.trim()}
-                            className="absolute right-1 h-9 w-9 rounded-full bg-[#232F3E] text-white shadow hover:bg-[#111827]"
-                          >
-                            <ArrowUp className="h-4 w-4" />
                           </Button>
                         )}
                       </div>
@@ -263,29 +169,77 @@ export default function Chat() {
               </FieldGroup>
             </form>
           </div>
-        </section>
 
-        {/* Footer */}
-        <footer className="border-t border-gray-100 bg-white">
-          <div className="mx-auto flex w-full max-w-6xl items-center justify-between px-6 py-3 text-[11px] text-gray-500">
-            <span>© {new Date().getFullYear()} {OWNER_NAME}</span>
-            <span className="space-x-1">
-              <Link href="/terms" className="underline">
-                Terms
-              </Link>
-              <span>·</span>
-              <Link href="https://ringel.ai" className="underline">
-                Powered by Ringel.AI
-              </Link>
-            </span>
+          {/* Body: messages + subtle loader + footer */}
+          <div className="flex flex-col bg-white">
+            {/* Suggested quick-start buttons (AWS-like) */}
+            <div className="px-6 pt-4 pb-2 space-y-2 text-xs text-[#374151] border-b border-gray-100">
+              <p className="font-medium text-[11px] uppercase tracking-wide text-[#6B7280]">
+                Want help getting started?
+              </p>
+              <div className="flex flex-col gap-2">
+                <QuickStartButton
+                  label="Analyze my product's reviews"
+                  prompt="Help me analyze reviews for my Amazon product and show top complaints and strengths."
+                  onClick={(text) => form.setValue("message", text)}
+                />
+                <QuickStartButton
+                  label="Compare with a competitor ASIN"
+                  prompt="Compare my ASIN to a close competitor based on Amazon reviews and highlight gaps."
+                  onClick={(text) => form.setValue("message", text)}
+                />
+                <QuickStartButton
+                  label="Find key issues hurting my rating"
+                  prompt="From recent reviews, identify the top issues hurting my star rating and how to fix them."
+                  onClick={(text) => form.setValue("message", text)}
+                />
+              </div>
+            </div>
+
+            {/* Messages area */}
+            <div className="max-h-[540px] overflow-y-auto px-6 py-4">
+              {isClient ? (
+                <>
+                  <MessageWall
+                    messages={messages}
+                    status={status}
+                    durations={durations}
+                    onDurationChange={handleDurationChange}
+                  />
+                  {status === "submitted" && (
+                    <div className="flex justify-start max-w-3xl w-full mt-2">
+                      <Loader2 className="h-4 w-4 animate-spin text-gray-400" />
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="flex justify-center w-full py-6">
+                  <Loader2 className="h-4 w-4 animate-spin text-gray-400" />
+                </div>
+              )}
+            </div>
+
+            {/* Tiny footer like AWS widget */}
+            <div className="border-t border-gray-100 px-6 py-3 text-[11px] text-gray-500 flex justify-between items-center">
+              <span>© {new Date().getFullYear()} {OWNER_NAME}</span>
+              <span className="space-x-1">
+                <Link href="/terms" className="underline">
+                  Terms
+                </Link>
+                <span>·</span>
+                <Link href="https://ringel.ai" className="underline">
+                  Powered by Ringel.AI
+                </Link>
+              </span>
+            </div>
           </div>
-        </footer>
-      </div>
+        </div>
+      </main>
     </div>
   );
 }
 
-// Quick-start pill button
+// Small helper for the quick-start buttons
 function QuickStartButton({
   label,
   prompt,
@@ -293,13 +247,13 @@ function QuickStartButton({
 }: {
   label: string;
   prompt: string;
-  onClick: (text: string) => void;
+  onClick: (prompt: string) => void;
 }) {
   return (
     <button
       type="button"
       onClick={() => onClick(prompt)}
-      className="rounded-full border border-[#D1D5DB] bg-white px-4 py-2 text-[11px] font-medium text-[#111827] hover:border-[#A5B4FC] hover:bg-[#EEF2FF] transition"
+      className="w-full rounded-xl border border-[#D1D5DB] bg-gradient-to-r from-[#E5F0FF] to-[#F5E8FF] px-3 py-2 text-left text-[11px] font-medium text-[#111827] hover:border-[#A5B4FC] hover:shadow-sm transition"
     >
       {label}
     </button>
